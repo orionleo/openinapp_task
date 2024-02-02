@@ -1,4 +1,4 @@
-import  { Request, Response } from "express";
+import { Request, Response } from "express";
 import Task from "../sequelize/models/task";
 import SubTask from "../sequelize/models/subTask";
 import { Op } from "sequelize";
@@ -20,7 +20,6 @@ interface Req extends Request {
 
 export const createSubTask = async (req: Request, res: Response) => {
   try {
-    const { userId } = req as Req;
     const { body } = req as Req;
     const { taskId } = body;
 
@@ -29,7 +28,7 @@ export const createSubTask = async (req: Request, res: Response) => {
       status: 0,
     });
 
-    res.status(200).json({});
+    res.status(200).json({ subTask });
   } catch (error) {
     console.error("Error in createSubTask:", error);
     res.status(500).json({ message: "Internal Server Error" });
