@@ -2,13 +2,13 @@ import { Request, Response } from "express";
 import Task from "../sequelize/models/task";
 import { ParsedQs } from "qs";
 import { ParamsDictionary } from "express-serve-static-core";
-import SubTask from "../sequelize/models/subTask";
 import User from "../sequelize/models/user";
 import twilio from "twilio";
 
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const client = twilio(accountSid, authToken);
+
 interface ReqBody {
   tasks: Task[];
 }
@@ -32,48 +32,65 @@ interface Req extends Request {
 }
 
 export const callUser = async (req: Request, res: Response) => {
-  //   const { body } = req as Req;
-  //   const { tasks } = body;
-  //   let users: User[] = [];
-  //   tasks.map((task) => {
-  //     async function getUser() {
-  //       const user = await User.findOne({
-  //         where: {
-  //           id: task.dataValues.user_id,
-  //         },
-  //       });
-  //       if (user === null) {
-  //         return;
-  //       }
-  //       users.push(user);
-  //     }
+  try {
+    const { body } = req as Req;
+    const { tasks } = body;
+    let users: User[] = [];
+    
+    // Fetch users for each task
+    for (const task of tasks) {
+      const user = await User.findOne({
+        where: {
+          id: task.dataValues.user_id,
+        },
+      });
 
-  //     getUser();
-  //   });
-  //   const sortedUsers = users.sort(
-  //     (user1, user2) => user1.dataValues.priority - user2.dataValues.priority
-  //   );
+      if (user !== null) {
+        users.push(user);
+      }
+    }
 
-  client.calls
-    .create({
-      method: "GET",
-      statusCallback: "http://localhost:8000/users/get-call-status",
-      statusCallbackEvent: ["initiated", "answered", "failed", "completed"],
-      statusCallbackMethod: "POST",
-      url: "http://demo.twilio.com/docs/voice.xml",
-      to: `+918510029270`,
-      from: "+19306001125",
-    })
-    .then((call) => console.log(call.status))
-    .catch((error) => {
-      console.error("Twilio API Error:", error);
-    });
+    // Sort users by priority
+    const sortedUsers = users.sort(
+      (user1, user2) => user1.dataValues.priority - user2.dataValues.priority
+    );
 
-  return res.status(200);
-};
+    // Initiate calls to sorted users
+    for (const user of sortedUsers) {
+      const call = await client.calls.create({
+        method: "GET",
+        url: "http://demo.twilio.com/docs/voice.xml",
+        to: `+91${user.dataValues.phone_number}`,
+        from: "+19306001125",
+      });
 
-export const getCallStatus = async (req: Request, res: Response) => {
-  const statusUpdate = req.body;
-  console.log(statusUpdate);
-  return res.status(200).json({ statusUpdate }).end();
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      const calls = await client.calls.list();
+
+      const currentCall = calls.filter(
+        (call) => call.to === "+91" + user.dataValues.phone_number
+      )[0];
+      console.log(
+        "CALL STATUS",
+        currentCall.status,
+        user.dataValues.phone_number
+      );
+
+      if (
+        currentCall.status === "completed" ||
+        currentCall.status === "in-progress"
+      ) {
+        return res.status(200).json({ message: "User call initiated." });
+      } else {
+        console.log(
+          `User ${user.dataValues.phone_number} did not answer or the call failed.`
+        );
+      }
+    }
+
+    return res.status(400).json({ message: "No user picked up the call" });
+  } catch (error) {
+    console.error("Error in callUser:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
 };

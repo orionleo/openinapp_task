@@ -42,6 +42,7 @@ cron.schedule("0 0 * * *", async () => {
   const res2 = await axios.post("http://localhost:8000/tasks/call-user", {
     tasks: statusMessages,
   });
+  console.log(res2.data)
 });
 
 const PORT: number = Number(process.env.PORT!);

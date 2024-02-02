@@ -3,6 +3,7 @@ import Task from "../sequelize/models/task";
 import { ParsedQs } from "qs";
 import { ParamsDictionary } from "express-serve-static-core";
 import SubTask from "../sequelize/models/subTask";
+
 interface ReqBody {
   title?: string;
   description?: string;
@@ -29,231 +30,175 @@ interface Req extends Request {
 }
 
 export const createTask = async (req: Request, res: Response) => {
-  const { userId } = req as Req;
-  if (userId == undefined) {
-    return res.status(401).json({ message: "Unauthorized" });
+  try {
+    const { userId } = req as Req;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    const { body } = req as Req;
+    const { title, description, due_date } = body;
+
+    if (!title || !description || !due_date) {
+      res.status(400).json({ message: "Data is missing" });
+      return;
+    }
+
+    const dueDate = new Date(due_date);
+    const currentDate = new Date();
+
+    const millisecondsPerDay = 24 * 60 * 60 * 1000;
+    const daysRemaining = Math.ceil((dueDate.getTime() - currentDate.getTime()) / millisecondsPerDay);
+    console.log(daysRemaining);
+
+    let priority = 0;
+
+    if (daysRemaining > 0 && daysRemaining < 1) priority = 0;
+    else if (daysRemaining >= 1 && daysRemaining <= 2) priority = 1;
+    else if (daysRemaining >= 3 && daysRemaining <= 4) priority = 2;
+    else if (daysRemaining >= 5) priority = 3;
+    else {
+      return res.status(400).json({ message: "The task is already past the due date" });
+    }
+
+    const task = await Task.create({
+      user_id: userId,
+      due_date: due_date,
+      title,
+      description,
+      priority,
+    });
+
+    res.status(200).json({ task });
+  } catch (error) {
+    console.error("Error in createTask:", error);
+    res.status(500).json({ message: "Internal Server Error" });
   }
-  const { body } = req as Req;
-  const { title, description, due_date } = body;
-
-  if (
-    !title ||
-    !description ||
-    !due_date ||
-    title == undefined ||
-    description == undefined ||
-    due_date == undefined
-  ) {
-    res.status(400).json({ message: "Data is missing" });
-    return;
-  }
-
-  const dueDate = new Date(due_date);
-  const currentDate = new Date();
-
-  const millisecondsPerDay = 24 * 60 * 60 * 1000; // Number of milliseconds in a day
-
-  const daysRemaining = Math.ceil(
-    (dueDate.getTime() - currentDate.getTime()) / millisecondsPerDay
-  );
-  console.log(daysRemaining);
-
-  let priority = 0;
-
-  if (daysRemaining > 0 && daysRemaining < 1) priority = 0;
-  else if (daysRemaining >= 1 && daysRemaining <= 2) priority = 1;
-  else if (daysRemaining >= 3 && daysRemaining <= 4) priority = 2;
-  else if (daysRemaining >= 5) priority = 3;
-  else {
-    return res
-      .status(400)
-      .json({ message: "The task is already past the due date" });
-  }
-
-  const task = await Task.create({
-    user_id: userId,
-    due_date: due_date,
-    title,
-    description,
-    priority,
-  });
-
-  res.status(200).json({ task });
 };
 
 export const getAllTasksForUser = async (req: Request, res: Response) => {
-  const pageCount = 8;
-  const { params, query } = req as Req;
-  const {
-    priority: givenPriority,
-    due_date: givenDueDate,
-    page: givenPage,
-  } = query;
+  try {
+    const pageCount = 8;
+    const { params, query } = req as Req;
+    const { priority: givenPriority, due_date: givenDueDate, page: givenPage } = query;
 
-  //converting priority and page to number and due_date to a Date format
-  const priority =
-    givenPriority !== undefined ? parseInt(givenPriority) : undefined;
-  const page = givenPage !== undefined ? parseInt(givenPage) : undefined;
-  const dueDate =
-    givenDueDate !== undefined ? new Date(givenDueDate) : undefined;
-  console.log("DUE DATE", dueDate);
-  const { userId } = params;
+    const priority = givenPriority !== undefined ? parseInt(givenPriority) : undefined;
+    const page = givenPage !== undefined ? parseInt(givenPage) : undefined;
+    const dueDate = givenDueDate !== undefined ? new Date(givenDueDate) : undefined;
+    console.log("DUE DATE", dueDate);
 
-  if (userId == undefined) {
-    return res.status(400).json({ message: "No user id" });
-  }
+    const { userId } = params;
+    if (!userId) {
+      return res.status(400).json({ message: "No user id" });
+    }
 
-  const tasks = await Task.findAll({
-    where: { user_id: userId },
-  });
-  // console.log(priority, page, dueDate, tasks);
+    const tasks = await Task.findAll({ where: { user_id: userId } });
+    
+    let filteredTasks = tasks;
+    if (givenPriority) {
+      filteredTasks = filteredTasks.filter((task) => task.priority == priority);
+    }
 
-  // Apply filters based on priority
-  let filteredTasks = tasks;
-  if (givenPriority) {
-    filteredTasks = filteredTasks.filter((task) => task.priority == priority);
-    // console.log("FILTERED_TASKS",filteredTasks);
-  }
+    if (dueDate) {
+      filteredTasks = filteredTasks.filter((task) => task.due_date && new Date(task.due_date) <= new Date(dueDate));
+    }
 
-  if (dueDate) {
-    // console.log("typeof dueDate",typeof dueDate)
-    filteredTasks = filteredTasks.filter((task) => {
-      // Assuming task.due_date is a Date object
-      return task.due_date && new Date(task.due_date) <= new Date(dueDate);
-    });
-  }
+    if (page) {
+      const startIndex = (page - 1) * pageCount;
+      const endIndex = startIndex + pageCount;
+      filteredTasks = filteredTasks.slice(startIndex, endIndex);
+    }
 
-  if (page) {
-    const startIndex = (page - 1) * pageCount;
-    const endIndex = startIndex + pageCount;
-    filteredTasks = filteredTasks.slice(startIndex, endIndex);
-  }
-  if (filteredTasks.length > 0) {
-    res.status(200).json(filteredTasks);
-    return;
-  } else {
-    res
-      .status(400)
-      .json({ message: "No task with the given filters", filteredTasks });
-    return;
+    if (filteredTasks.length > 0) {
+      res.status(200).json(filteredTasks);
+    } else {
+      res.status(400).json({ message: "No task with the given filters", filteredTasks });
+    }
+  } catch (error) {
+    console.error("Error in getAllTasksForUser:", error);
+    res.status(500).json({ message: "Internal Server Error" });
   }
 };
 
 export const updateTask = async (req: Request, res: Response) => {
-  const { body, params } = req as Req;
+  try {
+    const { body, params } = req as Req;
 
-  const { due_date, status } = body;
+    const { due_date, status } = body;
+    const { taskId } = params;
 
-  const { taskId } = params;
+    const task = await Task.findOne({ where: { id: taskId } });
+    if (!task) {
+      return res.status(404).json({ message: "Task not found" });
+    }
 
-  const task = await Task.findOne({
-    where: {
-      id: taskId,
-    },
-  });
-  if (!task) {
-    return;
-  }
-  if (
-    due_date !== undefined &&
-    (status === "DONE" || status === "TODO" || status === "IN_PROGRESS")
-  ) {
-    await Task.update(
-      { due_date: new Date(due_date), status: status },
-      {
-        where: {
-          id: taskId,
-        },
-      }
-    );
+    if (due_date !== undefined && (status === "DONE" || status === "TODO" || status === "IN_PROGRESS")) {
+      await Task.update(
+        { due_date: new Date(due_date), status: status },
+        { where: { id: taskId } }
+      );
 
-    const task = await Task.findOne({
-      where: {
-        id: taskId,
-      },
-    });
-    console.log(task);
-    return;
-  } else if (due_date !== undefined) {
-    await Task.update(
-      { due_date: new Date(due_date) },
-      {
-        where: {
-          id: taskId,
-        },
-      }
-    );
-    const task = await Task.findOne({
-      where: {
-        id: taskId,
-      },
-    });
-    console.log(task);
-    return;
-  } else if (
-    status === "DONE" ||
-    status === "TODO" ||
-    status === "IN_PROGRESS"
-  ) {
-    await Task.update(
-      { status: status },
-      {
-        where: {
-          id: taskId,
-        },
-      }
-    );
-    const task = await Task.findOne({
-      where: {
-        id: taskId,
-      },
-    });
-    console.log(task);
-    return;
-  } else {
-    return;
+      const updatedTask = await Task.findOne({ where: { id: taskId } });
+      console.log(updatedTask);
+      return res.status(200).json({ updatedTask });
+    } else if (due_date !== undefined) {
+      await Task.update(
+        { due_date: new Date(due_date) },
+        { where: { id: taskId } }
+      );
+      const updatedTask = await Task.findOne({ where: { id: taskId } });
+      console.log(updatedTask);
+      return res.status(200).json({ updatedTask });
+    } else if (status === "DONE" || status === "TODO" || status === "IN_PROGRESS") {
+      await Task.update(
+        { status: status },
+        { where: { id: taskId } }
+      );
+      const updatedTask = await Task.findOne({ where: { id: taskId } });
+      console.log(updatedTask);
+      return res.status(200).json({ updatedTask });
+    } else {
+      return res.status(400).json({ message: "Invalid request" });
+    }
+  } catch (error) {
+    console.error("Error in updateTask:", error);
+    res.status(500).json({ message: "Internal Server Error" });
   }
 };
 
 export const deleteTask = async (req: Request, res: Response) => {
-  const { params } = req as Req;
-  const { taskId } = params;
-  await Task.destroy({
-    where: {
-      id: taskId,
-    },
-  });
-  const subTasks = await SubTask.findAll({
-    where: {
-      task_id: taskId,
-    },
-  });
-  subTasks.map((subtask) => {
-    async function deleteSubTask() {
-      await SubTask.destroy({
-        where: {
-          id: subtask.dataValues.id,
-        },
-      });
+  try {
+    const { params } = req as Req;
+    const { taskId } = params;
+
+    const task = await Task.findOne({ where: { id: taskId } });
+    if (!task) {
+      return res.status(404).json({ message: "Task not found" });
     }
-    deleteSubTask();
-  });
-  return res
-    .status(200)
-    .json({ message: "Tasks and Sub Tasks Successfully Delete" });
+
+    await Task.destroy({ where: { id: taskId } });
+
+    const subTasks = await SubTask.findAll({ where: { task_id: taskId } });
+    subTasks.map(async (subtask) => {
+      await SubTask.destroy({ where: { id: subtask.dataValues.id } });
+    });
+
+    return res.status(200).json({ message: "Tasks and Sub Tasks Successfully Deleted" });
+  } catch (error) {
+    console.error("Error in deleteTask:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
 };
 
 export const updateTaskPriority = async (req: Request, res: Response) => {
-  const tasks = await Task.findAll();
-  let statusMessages: Task[] = [];
-  tasks.map((task) => {
-    async function changePriority() {
-      const millisecondsPerDay = 24 * 60 * 60 * 1000; // Number of milliseconds in a day
+  try {
+    const tasks = await Task.findAll();
+    let statusMessages: Task[] = [];
+    tasks.map(async (task) => {
+      const millisecondsPerDay = 24 * 60 * 60 * 1000;
       const dueDate = new Date(task.dataValues.due_date);
       const currentDate = new Date();
-      const daysRemaining = Math.ceil(
-        (dueDate.getTime() - currentDate.getTime()) / millisecondsPerDay
-      );
+      const daysRemaining = Math.ceil((dueDate.getTime() - currentDate.getTime()) / millisecondsPerDay);
       console.log(daysRemaining);
 
       let priority = 0;
@@ -266,17 +211,17 @@ export const updateTaskPriority = async (req: Request, res: Response) => {
         priority = task.dataValues.priority - 1;
         statusMessages.push(task);
       }
+
       await Task.update(
         { priority },
-        {
-          where: {
-            id: task.dataValues.id,
-          },
-        }
+        { where: { id: task.dataValues.id } }
       );
-    }
-    changePriority();
-  });
-  const updatedTasks = await Task.findAll();
-  return res.status(200).json({ updatedTasks, statusMessages });
+    });
+
+    const updatedTasks = await Task.findAll();
+    return res.status(200).json({ updatedTasks, statusMessages });
+  } catch (error) {
+    console.error("Error in updateTaskPriority:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
 };

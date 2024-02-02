@@ -9,7 +9,7 @@ function defineAssociations() {
 
   
   Task.belongsTo(User, { foreignKey: "user_id" });
-  User.hasMany(Task, { foreignKey: "user_id" });
+  User.hasMany(Task, { foreignKey: "user_id",onDelete:'cascade' });
 }
 
 export default defineAssociations;
