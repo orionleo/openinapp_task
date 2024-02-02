@@ -16,7 +16,7 @@ import userRoutes from "./routes/userRoutes";
 dotenv.config();
 
 // Create an Express application
-const app: Application = express();
+export const app: Application = express();
 
 // Middleware for CORS
 app.use(cors());
