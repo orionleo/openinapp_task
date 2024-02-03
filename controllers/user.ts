@@ -11,6 +11,8 @@ const client = twilio(accountSid, authToken);
 
 interface ReqBody {
   tasks: Task[];
+  phoneNumber: bigint;
+  priority: 0 | 1 | 2;
 }
 
 interface ReqParams extends ParamsDictionary {
@@ -31,12 +33,37 @@ interface Req extends Request {
   query: ReqQuery;
 }
 
+export const createUser = async (req: Request, res: Response) => {
+  try {
+    const { body } = req as Req;
+    const { phoneNumber, priority } = body;
+
+    if (
+      !phoneNumber ||
+      String(phoneNumber).length !== 10 ||
+      (priority != 0 && priority != 1 && priority != 2)
+    ) {
+      throw Error(`Input right values for the user.`);
+    } else {
+      const user = await User.create({
+        phone_number: phoneNumber,
+        priority,
+      });
+      return res.status(200).json({message:"User created successfully",user})
+    }
+  } catch (error) {
+    const e = error as unknown as Error;
+    const errorMessage = e.message
+    return res.status(400).json({errorMessage})
+  }
+};
+
 export const callUser = async (req: Request, res: Response) => {
   try {
     const { body } = req as Req;
     const { tasks } = body;
     let users: User[] = [];
-    
+
     // Fetch users for each task
     for (const task of tasks) {
       const user = await User.findOne({

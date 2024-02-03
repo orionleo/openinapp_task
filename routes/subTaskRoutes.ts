@@ -6,7 +6,7 @@ import { createSubTask, deleteSubTask, getAllSubTasksForUser, updateSubTask } fr
 
 let subTaskRoutes = express.Router();
 
-subTaskRoutes.post("/create-sub-task",authenticateUser,createSubTask)
+subTaskRoutes.post("/create-sub-task",createSubTask)
 subTaskRoutes.get("/get-sub-tasks/:userId",getAllSubTasksForUser);
 subTaskRoutes.patch("/update-sub-task/:subTaskId",updateSubTask);
 subTaskRoutes.delete("/delete-sub-task/:subTaskId",deleteSubTask);

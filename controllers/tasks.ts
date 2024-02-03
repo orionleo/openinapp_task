@@ -35,7 +35,7 @@ export const createTask = async (req: Request, res: Response) => {
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized" });
     }
-    
+
     const { body } = req as Req;
     const { title, description, due_date } = body;
 
@@ -48,17 +48,21 @@ export const createTask = async (req: Request, res: Response) => {
     const currentDate = new Date();
 
     const millisecondsPerDay = 24 * 60 * 60 * 1000;
-    const daysRemaining = Math.ceil((dueDate.getTime() - currentDate.getTime()) / millisecondsPerDay);
+    const daysRemaining = Math.ceil(
+      (dueDate.getTime() - currentDate.getTime()) / millisecondsPerDay
+    );
     console.log(daysRemaining);
 
     let priority = 0;
 
-    if (daysRemaining > 0 && daysRemaining < 1) priority = 0;
+    if (daysRemaining == 0) priority = 0;
     else if (daysRemaining >= 1 && daysRemaining <= 2) priority = 1;
     else if (daysRemaining >= 3 && daysRemaining <= 4) priority = 2;
     else if (daysRemaining >= 5) priority = 3;
     else {
-      return res.status(400).json({ message: "The task is already past the due date" });
+      return res
+        .status(400)
+        .json({ message: "The task is already past the due date" });
     }
 
     const task = await Task.create({
@@ -80,11 +84,17 @@ export const getAllTasksForUser = async (req: Request, res: Response) => {
   try {
     const pageCount = 8;
     const { params, query } = req as Req;
-    const { priority: givenPriority, due_date: givenDueDate, page: givenPage } = query;
+    const {
+      priority: givenPriority,
+      due_date: givenDueDate,
+      page: givenPage,
+    } = query;
 
-    const priority = givenPriority !== undefined ? parseInt(givenPriority) : undefined;
+    const priority =
+      givenPriority !== undefined ? parseInt(givenPriority) : undefined;
     const page = givenPage !== undefined ? parseInt(givenPage) : undefined;
-    const dueDate = givenDueDate !== undefined ? new Date(givenDueDate) : undefined;
+    const dueDate =
+      givenDueDate !== undefined ? new Date(givenDueDate) : undefined;
     console.log("DUE DATE", dueDate);
 
     const { userId } = params;
@@ -93,14 +103,16 @@ export const getAllTasksForUser = async (req: Request, res: Response) => {
     }
 
     const tasks = await Task.findAll({ where: { user_id: userId } });
-    
+
     let filteredTasks = tasks;
     if (givenPriority) {
       filteredTasks = filteredTasks.filter((task) => task.priority == priority);
     }
 
     if (dueDate) {
-      filteredTasks = filteredTasks.filter((task) => task.due_date && new Date(task.due_date) <= new Date(dueDate));
+      filteredTasks = filteredTasks.filter(
+        (task) => task.due_date && new Date(task.due_date) <= new Date(dueDate)
+      );
     }
 
     if (page) {
@@ -112,7 +124,9 @@ export const getAllTasksForUser = async (req: Request, res: Response) => {
     if (filteredTasks.length > 0) {
       res.status(200).json(filteredTasks);
     } else {
-      res.status(400).json({ message: "No task with the given filters", filteredTasks });
+      res
+        .status(400)
+        .json({ message: "No task with the given filters", filteredTasks });
     }
   } catch (error) {
     console.error("Error in getAllTasksForUser:", error);
@@ -132,11 +146,36 @@ export const updateTask = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Task not found" });
     }
 
-    if (due_date !== undefined && (status === "DONE" || status === "TODO" || status === "IN_PROGRESS")) {
+    if (
+      due_date !== undefined &&
+      (status === "DONE" || status === "TODO" || status === "IN_PROGRESS")
+    ) {
       await Task.update(
         { due_date: new Date(due_date), status: status },
         { where: { id: taskId } }
       );
+      if (status === "DONE") {
+        const subtasks = await SubTask.findAll({
+          where: {
+            task_id: taskId,
+          },
+        });
+        console.log("SUBTASKS", subtasks);
+        if (subtasks.length && subtasks.length > 0) {
+          for (const subTask of subtasks) {
+            await SubTask.update(
+              {
+                status: 1,
+              },
+              {
+                where: {
+                  id: subTask.dataValues.id,
+                },
+              }
+            );
+          }
+        }
+      }
 
       const updatedTask = await Task.findOne({ where: { id: taskId } });
       console.log(updatedTask);
@@ -149,12 +188,35 @@ export const updateTask = async (req: Request, res: Response) => {
       const updatedTask = await Task.findOne({ where: { id: taskId } });
       console.log(updatedTask);
       return res.status(200).json({ updatedTask });
-    } else if (status === "DONE" || status === "TODO" || status === "IN_PROGRESS") {
-      await Task.update(
-        { status: status },
-        { where: { id: taskId } }
-      );
+    } else if (
+      status === "DONE" ||
+      status === "TODO" ||
+      status === "IN_PROGRESS"
+    ) {
+      await Task.update({ status: status }, { where: { id: taskId } });
       const updatedTask = await Task.findOne({ where: { id: taskId } });
+      if (status === "DONE") {
+        const subtasks = await SubTask.findAll({
+          where: {
+            task_id: taskId,
+          },
+        });
+        console.log("SUBTASKS", subtasks);
+        if (subtasks.length && subtasks.length > 0) {
+          for (const subTask of subtasks) {
+            await SubTask.update(
+              {
+                status: 1,
+              },
+              {
+                where: {
+                  id: subTask.dataValues.id,
+                },
+              }
+            );
+          }
+        }
+      }
       console.log(updatedTask);
       return res.status(200).json({ updatedTask });
     } else {
@@ -176,17 +238,20 @@ export const deleteTask = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Task not found" });
     }
 
-    await Task.destroy({ where: { id: taskId } });
-
     const subTasks = await SubTask.findAll({ where: { task_id: taskId } });
     subTasks.map(async (subtask) => {
       await SubTask.destroy({ where: { id: subtask.dataValues.id } });
     });
+    await Task.destroy({ where: { id: taskId } });
 
-    return res.status(200).json({ message: "Tasks and Sub Tasks Successfully Deleted" });
+    return res
+      .status(200)
+      .json({ message: "Tasks and Sub Tasks Successfully Deleted" });
   } catch (error) {
+    const e = error as unknown as any;
+    const message = e.message;
     console.error("Error in deleteTask:", error);
-    res.status(500).json({ message: "Internal Server Error" });
+    res.status(500).json({ message });
   }
 };
 
@@ -198,7 +263,9 @@ export const updateTaskPriority = async (req: Request, res: Response) => {
       const millisecondsPerDay = 24 * 60 * 60 * 1000;
       const dueDate = new Date(task.dataValues.due_date);
       const currentDate = new Date();
-      const daysRemaining = Math.ceil((dueDate.getTime() - currentDate.getTime()) / millisecondsPerDay);
+      const daysRemaining = Math.ceil(
+        (dueDate.getTime() - currentDate.getTime()) / millisecondsPerDay
+      );
       console.log(daysRemaining);
 
       let priority = 0;
@@ -212,10 +279,7 @@ export const updateTaskPriority = async (req: Request, res: Response) => {
         statusMessages.push(task);
       }
 
-      await Task.update(
-        { priority },
-        { where: { id: task.dataValues.id } }
-      );
+      await Task.update({ priority }, { where: { id: task.dataValues.id } });
     });
 
     const updatedTasks = await Task.findAll();

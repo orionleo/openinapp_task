@@ -5,11 +5,10 @@ import User from "./models/user";
 
 function defineAssociations() {
   SubTask.belongsTo(Task, { foreignKey: "task_id" });
-  Task.hasMany(SubTask, { foreignKey: "task_id" });
+  Task.hasMany(SubTask, { foreignKey: "task_id", onDelete: "cascade" });
 
-  
   Task.belongsTo(User, { foreignKey: "user_id" });
-  User.hasMany(Task, { foreignKey: "user_id",onDelete:'cascade' });
+  User.hasMany(Task, { foreignKey: "user_id", onDelete: "cascade" });
 }
 
 export default defineAssociations;

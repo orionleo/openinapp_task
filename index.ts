@@ -33,16 +33,15 @@ app.use("/tasks", taskRoutes);
 app.use("/subtasks", subTaskRoutes);
 app.use("/users", userRoutes);
 
-
 cron.schedule("0 0 * * *", async () => {
   console.log("Cron job running");
   const res = await axios.patch("http://localhost:8000/tasks/update-tasks");
   const data = res.data;
   const statusMessages: Task[] = data.statusMessages;
-  const res2 = await axios.post("http://localhost:8000/tasks/call-user", {
+  const res2 = await axios.post("http://localhost:8000/users/call-user", {
     tasks: statusMessages,
   });
-  console.log(res2.data)
+  console.log(res2.data);
 });
 
 const PORT: number = Number(process.env.PORT!);

@@ -22,6 +22,17 @@ export const createSubTask = async (req: Request, res: Response) => {
   try {
     const { body } = req as Req;
     const { taskId } = body;
+    console.log(taskId)
+
+    const task = await Task.findOne({
+      where:{
+        id:taskId
+      }
+    })
+
+    if(task===null){
+      return res.status(400).json({msg:"This task doesn't exist"});
+    }
 
     const subTask = await SubTask.create({
       task_id: taskId,
@@ -99,7 +110,14 @@ export const updateSubTask = async (req: Request, res: Response) => {
             id: subTask.dataValues.task_id,
           },
         })) as Task;
-
+        if(task===null){
+          await SubTask.destroy({
+            where:{
+              id:subTask.dataValues.id
+            }
+          })
+          return res.status(400).json({message:"This task and subtask don't exist"});
+        }
         if (task.dataValues.status === "TODO") {
           await Task.update(
             { status: "IN_PROGRESS" },

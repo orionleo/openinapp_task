@@ -3,13 +3,13 @@ import sequelize from ".."; // Import the Sequelize instance
 import Task from "./task";
 
 interface UserAttributes {
-  id: string;
+  id?: string;
   phone_number: bigint;
   priority: number;
 }
 
 class User extends Model<UserAttributes> {
-  declare id: string;
+  declare id?: string;
   declare phone_number: bigint;
   declare priority: number;
   declare createdAt: Date;
